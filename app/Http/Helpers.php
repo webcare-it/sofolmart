@@ -16,6 +16,7 @@ use App\Models\Wallet;
 use App\Models\CombinedOrder;
 use App\Models\User;
 use App\Models\Addon;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Shop;
 use App\Utility\SendSMSUtility;
@@ -829,59 +830,23 @@ if (!function_exists('addon_is_activated')) {
 
 // Add unified helper function for generating order codes
 if (!function_exists('generate_order_code')) {
-    /**
-     * Generate a unique order code based on domain name and incremental number
-     * Format: domain-000011
-     *
-     * @param int|null $number Not used in new implementation
-     * @param string $modelClass The Eloquent model class to use for checking uniqueness
-     * @return string
-     */
-    function generate_order_code($number = null, $modelClass = '\App\Models\Order')
+    function generate_order_code()
     {
-        // Get the APP_URL from environment
-        $appUrl = env('APP_URL', 'http://localhost');
+        // Get APP_URL
+        $appUrl = config('app.url');
 
-        // Parse the URL to get the host
-        $parsedUrl = parse_url($appUrl);
-        $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'localhost';
+        $host = parse_url($appUrl, PHP_URL_HOST);
 
-        // Remove www. prefix if present
         $host = preg_replace('/^www\./', '', $host);
 
-        // Extract domain name (remove TLD)
-        $domainParts = explode('.', $host);
-        if (count($domainParts) > 1) {
-            // Take the second to last part as the domain name (handles subdomains)
-            $domain = $domainParts[count($domainParts) - 2];
-        } else {
-            $domain = $host;
-        }
+        $domainName = Str::before($host, '.');
 
-        try {
-            // Get the current max code to ensure uniqueness
-            $maxCode = $modelClass::whereRaw("code REGEXP '^' . ? . '-[0-9]+'", [$domain])->max('code');
+        $lastOrder = Order::latest('id')->first();
+        $nextId = $lastOrder ? $lastOrder->id + 1 : 1;
 
-            $nextNumber = 1;
-            if ($maxCode) {
-                // Extract the number part from the max code
-                preg_match('/' . preg_quote($domain) . '-(\d+)/', $maxCode, $matches);
-                if (isset($matches[1])) {
-                    $nextNumber = intval($matches[1]) + 1;
-                }
-            }
+        $orderNumber = str_pad($nextId, 6, '0', STR_PAD_LEFT);
 
-            // Format the number to 6 digits with leading zeros
-            $formattedNumber = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
-            $code = $domain . '-' . $formattedNumber;
-
-            return $code;
-        } catch (\Exception $e) {
-            // If there's an error, fall back to timestamp-based approach
-            $timestamp = time();
-            $formattedNumber = str_pad(($timestamp % 1000000), 6, '0', STR_PAD_LEFT);
-            return $domain . '-' . $formattedNumber;
-        }
+        return strtolower($domainName) . '-' . $orderNumber;
     }
 }
 
