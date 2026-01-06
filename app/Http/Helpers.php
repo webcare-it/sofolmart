@@ -757,7 +757,7 @@ if (!function_exists('checkout_done')) {
                 NotificationUtility::sendOrderPlacedNotification($order);
                 calculateCommissionAffilationClubPoint($order);
             } catch (\Exception $e) {
-               
+
             }
         }
     }
@@ -832,7 +832,7 @@ if (!function_exists('generate_order_code')) {
     /**
      * Generate a unique order code based on domain name and incremental number
      * Format: domain-000011
-     * 
+     *
      * @param int|null $number Not used in new implementation
      * @param string $modelClass The Eloquent model class to use for checking uniqueness
      * @return string
@@ -841,14 +841,14 @@ if (!function_exists('generate_order_code')) {
     {
         // Get the APP_URL from environment
         $appUrl = env('APP_URL', 'http://localhost');
-        
+
         // Parse the URL to get the host
         $parsedUrl = parse_url($appUrl);
         $host = isset($parsedUrl['host']) ? $parsedUrl['host'] : 'localhost';
-        
+
         // Remove www. prefix if present
         $host = preg_replace('/^www\./', '', $host);
-        
+
         // Extract domain name (remove TLD)
         $domainParts = explode('.', $host);
         if (count($domainParts) > 1) {
@@ -857,43 +857,31 @@ if (!function_exists('generate_order_code')) {
         } else {
             $domain = $host;
         }
-        
-        // Generate a unique sequential number
-        $attempt = 0;
-        do {
-            try {
-                // Get the current max order ID to ensure uniqueness
-                $maxId = $modelClass::max('id');
-                $nextNumber = ($maxId ?: 0) + 1 + $attempt;
-                
-                // Format the number to 6 digits with leading zeros
-                $formattedNumber = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
-                $code = $domain . '-' . $formattedNumber;
-                
-                // Check if this code already exists
-                $existingOrder = $modelClass::where('code', $code)->first();
-                
-                if (!$existingOrder) {
-                    // Code is unique
-                    return $code;
+
+        try {
+            // Get the current max code to ensure uniqueness
+            $maxCode = $modelClass::whereRaw("code REGEXP '^' . ? . '-[0-9]+'", [$domain])->max('code');
+
+            $nextNumber = 1;
+            if ($maxCode) {
+                // Extract the number part from the max code
+                preg_match('/' . preg_quote($domain) . '-(\d+)/', $maxCode, $matches);
+                if (isset($matches[1])) {
+                    $nextNumber = intval($matches[1]) + 1;
                 }
-                
-                // If code exists, try next number
-                $attempt++;
-                
-                // Safety check to prevent infinite loops
-                if ($attempt > 1000) {
-                    // Generate random suffix if too many attempts
-                    $randomNumber = rand(100000, 999999);
-                    return $domain . '-R' . $randomNumber;
-                }
-            } catch (\Exception $e) {
-                // If there's an error, fall back to timestamp-based approach
-                $timestamp = time();
-                $formattedNumber = str_pad(($timestamp % 1000000), 6, '0', STR_PAD_LEFT);
-                return $domain . '-' . $formattedNumber;
             }
-        } while (true);
+
+            // Format the number to 6 digits with leading zeros
+            $formattedNumber = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+            $code = $domain . '-' . $formattedNumber;
+
+            return $code;
+        } catch (\Exception $e) {
+            // If there's an error, fall back to timestamp-based approach
+            $timestamp = time();
+            $formattedNumber = str_pad(($timestamp % 1000000), 6, '0', STR_PAD_LEFT);
+            return $domain . '-' . $formattedNumber;
+        }
     }
 }
 
